@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: brewlite_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: brewlite_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: brewlite_backend
+    restart: always
+    environment:
+      PORT: 4000
+      DATABASE_URL: "postgresql://postgres:postgrespassword@postgres:5432/brewlite_db?schema=public"
+      JWT_SECRET: "brewlite_super_secret_key"
+      JWT_EXPIRES_IN: "7d"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: brewlite_frontend
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
