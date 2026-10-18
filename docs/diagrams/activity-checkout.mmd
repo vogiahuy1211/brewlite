@@ -1,0 +1,78 @@
+flowchart TD
+    START([Bắt đầu]) --> A1
+
+    subgraph USER["Khách hàng"]
+        A1[Mở ứng dụng BrewLite]
+        A4[Chọn sản phẩm\nsize + topping]
+        A6[Xem Giỏ hàng\nKiểm tra tổng tiền]
+        A8{Đã đăng nhập?}
+        A9[Đăng nhập / Đăng ký]
+        A11[Chọn phương thức\nVí / Thẻ]
+        A12[Nhấn Xác nhận trả]
+        A_RETRY{Thử lại?}
+        A_END_FAIL([Hủy đơn])
+        A_END_OK([Nhận đồ uống])
+    end
+
+    subgraph FRONTEND["Frontend - Next.js"]
+        B1[Gọi GET /products\nHiển thị Menu]
+        B2{Tải thành công?}
+        B3[Hiển thị Skeleton Loading]
+        B4[Hiển thị lưới sản phẩm]
+        B_ERR[Hiển thị thông báo lỗi]
+        B5[Cập nhật Cart Store - Zustand]
+        B6[Tính tổng tiền]
+        B10[Sinh Idempotency-Key UUID v4]
+        B11[Gọi POST /orders]
+        B13[Gọi POST /payments + Idempotency-Key]
+        B_CONFIRM[Hiển thị màn hình Xác nhận\nMã đơn + PAID]
+        B_FAIL[Hiển thị thông báo\nThanh toán thất bại]
+    end
+
+    subgraph BACKEND["Backend - NestJS API"]
+        C1[Xác thực JWT]
+        C2[Validate payload\nclass-validator]
+        C3{Payload hợp lệ?}
+        C4[Mở DB Transaction\nKiểm tra tồn kho\nOptimistic Lock]
+        C5{Tồn kho đủ?}
+        C6[Tạo Orders PENDING\nTrừ stock + tăng version\nCommit Transaction]
+        C7[Kiểm tra Idempotency-Key]
+        C8{Key đã tồn tại?}
+        C9[Gọi Mock Payment Service]
+        C10{Thanh toán thành công?}
+        C11[Cập nhật PAID\nCộng loyalty_points]
+        C12[Cập nhật PAYMENT_FAILED]
+        C_DUP[Trả lại kết quả cũ]
+        C_STOCK_ERR[Rollback\nTrả 409 Conflict]
+    end
+
+    subgraph DB["PostgreSQL"]
+        D1[(Lưu Orders + OrderItems)]
+        D2[(Lưu Payments SUCCESS/FAILED)]
+        D3[(Cập nhật Users.loyalty_points)]
+    end
+
+    A1 --> B1
+    B1 --> B3 --> B2
+    B2 -->|Thành công| B4
+    B2 -->|Thất bại| B_ERR
+    B4 --> A4
+    A4 --> B5 --> B6 --> A6
+    A6 --> A8
+    A8 -->|Chưa| A9 --> A8
+    A8 -->|Đã đăng nhập| A11 --> A12
+    A12 --> B10 --> B11
+    B11 --> C1 --> C2 --> C3
+    C3 -->|Không hợp lệ| B_ERR
+    C3 -->|Hợp lệ| C4 --> C5
+    C5 -->|Không đủ| C_STOCK_ERR --> B_ERR
+    C5 -->|Đủ| C6 --> D1 --> B13
+    B13 --> C7 --> C8
+    C8 -->|Đã tồn tại| C_DUP
+    C8 -->|Lần đầu| C9 --> C10
+    C10 -->|Thành công| C11 --> D2 --> D3 --> B_CONFIRM --> A_END_OK
+    C10 -->|Thất bại| C12 --> D2 --> B_FAIL
+    C_DUP --> B_CONFIRM
+    B_FAIL --> A_RETRY
+    A_RETRY -->|Có| B10
+    A_RETRY -->|Không| A_END_FAIL

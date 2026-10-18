@@ -1,0 +1,136 @@
+classDiagram
+    direction TB
+
+    class OrderStatus {
+        <<enumeration>>
+        PENDING
+        PAID
+        PAYMENT_FAILED
+        PREPARING
+        READY
+        COMPLETED
+        CANCELLED
+    }
+
+    class PaymentMethod {
+        <<enumeration>>
+        WALLET
+        CARD
+    }
+
+    class PaymentStatus {
+        <<enumeration>>
+        SUCCESS
+        FAILED
+    }
+
+    class ItemSize {
+        <<enumeration>>
+        S
+        M
+        L
+    }
+
+    class Users {
+        +UUID id
+        +String email
+        +String password_hash
+        +Int loyalty_points
+        +register(email, password) Users
+        +login(email, password) String
+        +addLoyaltyPoints(amount) void
+    }
+
+    class Products {
+        +UUID id
+        +String name
+        +Decimal price
+        +String image_url
+        +Int stock
+        +Int version
+        +isAvailable(qty) Boolean
+        +decreaseStock(qty, version) void
+    }
+
+    class Toppings {
+        +UUID id
+        +String name
+        +Decimal price
+    }
+
+    class Promotions {
+        +UUID id
+        +String code
+        +Decimal discount_amount
+        +Boolean is_active
+        +DateTime start_at
+        +DateTime end_at
+        +isValid() Boolean
+        +apply(subtotal) Decimal
+    }
+
+    class Orders {
+        +UUID id
+        +UUID user_id
+        +UUID promo_id
+        +OrderStatus status
+        +Decimal subtotal
+        +Decimal discount_amount
+        +Decimal final_amount
+        +DateTime created_at
+        +create(userId, items, promoCode) Orders
+        +cancel() void
+    }
+
+    class OrderItems {
+        +UUID id
+        +UUID order_id
+        +UUID product_id
+        +ItemSize size
+        +Int qty
+        +Decimal unit_price
+        +Decimal line_total
+        +calculateLineTotal() Decimal
+    }
+
+    class OrderItemToppings {
+        +UUID order_item_id
+        +UUID topping_id
+        +Decimal price_at_purchase
+    }
+
+    class Payments {
+        +UUID id
+        +UUID order_id
+        +String idempotency_key
+        +Decimal amount
+        +PaymentMethod method
+        +PaymentStatus status
+        +isDuplicate(key) Boolean
+    }
+
+    class OrderStateMachine {
+        <<service>>
+        +assertTransition(from OrderStatus, to OrderStatus) void
+        +canTransition(from OrderStatus, to OrderStatus) Boolean
+    }
+
+    class MockPaymentService {
+        <<service>>
+        +processPayment(amount, method) PaymentResult
+    }
+
+    Users "1" --> "0..*" Orders : places
+    Promotions "0..1" --> "0..*" Orders : applies to
+    Orders "1" *-- "1..*" OrderItems : contains
+    OrderItems "0..*" --> "1" Products : references
+    OrderItems "1" *-- "0..*" OrderItemToppings : has
+    OrderItemToppings "0..*" --> "1" Toppings : references
+    Orders "1" *-- "0..*" Payments : paid by
+    Orders --> OrderStatus : status
+    Payments --> PaymentMethod : method
+    Payments --> PaymentStatus : status
+    OrderItems --> ItemSize : size
+    OrderStateMachine ..> OrderStatus : validates
+    OrderStateMachine ..> Orders : used by
+    MockPaymentService ..> Payments : creates

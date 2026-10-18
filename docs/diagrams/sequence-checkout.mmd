@@ -1,0 +1,102 @@
+sequenceDiagram
+    autonumber
+    actor Customer as Khách hàng
+    participant UI as Next.js UI
+    participant API as NestJS API
+    participant DB as PostgreSQL
+    participant PAY as Mock Payment
+
+    rect rgb(235, 245, 255)
+        Note over Customer,DB: Giai đoạn 1 — Xem Menu
+        Customer->>UI: Mở trang chủ
+        UI->>API: GET /products
+        API->>DB: SELECT * FROM Products WHERE stock > 0
+        DB-->>API: Danh sách sản phẩm
+        API-->>UI: 200 OK — danh sách sản phẩm
+        UI-->>Customer: Hiển thị lưới sản phẩm
+    end
+
+    rect rgb(235, 255, 240)
+        Note over Customer,UI: Giai đoạn 2 — Chọn món và Giỏ hàng
+        Customer->>UI: Chọn sản phẩm, size, topping
+        UI->>API: GET /products/:id
+        API->>DB: SELECT product + toppings WHERE id = ?
+        DB-->>API: Chi tiết sản phẩm
+        API-->>UI: 200 OK — chi tiết và toppings
+        UI-->>Customer: Hiển thị chi tiết + tính giá động
+        Customer->>UI: Nhấn Thêm vào giỏ
+        UI->>UI: Zustand addToCart — cập nhật state
+        Customer->>UI: Nhấn Thanh toán
+    end
+
+    rect rgb(255, 248, 225)
+        Note over Customer,API: Giai đoạn 3 — Xác thực JWT
+        UI->>UI: Kiểm tra localStorage — token tồn tại?
+        alt Chưa đăng nhập
+            UI-->>Customer: Redirect đến /login
+            Customer->>UI: Nhập email + password
+            UI->>API: POST /auth/login
+            API->>DB: SELECT user WHERE email = ?
+            DB-->>API: User record
+            API->>API: bcrypt.compare password
+            API-->>UI: 200 OK — access_token
+            UI->>UI: Lưu token vào localStorage
+        end
+    end
+
+    rect rgb(255, 240, 245)
+        Note over Customer,DB: Giai đoạn 4 — Tạo Đơn hàng
+        Customer->>UI: Chọn phương thức Ví hoặc Thẻ
+        UI->>UI: Sinh idempotencyKey = uuid()
+        UI->>API: POST /orders với Authorization Bearer token
+        API->>API: JwtAuthGuard — xác thực userId
+        API->>API: class-validator — validate CreateOrderDto
+        alt Payload không hợp lệ
+            API-->>UI: 400 Bad Request
+            UI-->>Customer: Hiển thị lỗi validation
+        end
+        API->>DB: BEGIN TRANSACTION
+        loop Mỗi sản phẩm trong đơn
+            API->>DB: SELECT stock, version FROM Products WHERE id = ? FOR UPDATE
+            DB-->>API: stock, version
+            alt Tồn kho không đủ hoặc version không khớp
+                API->>DB: ROLLBACK
+                API-->>UI: 409 Conflict — Sản phẩm hết hàng
+                UI-->>Customer: Thông báo hết hàng
+            end
+            API->>DB: UPDATE Products SET stock = stock - qty, version = version + 1
+        end
+        API->>DB: INSERT INTO Orders status=PENDING
+        API->>DB: INSERT INTO OrderItems
+        API->>DB: COMMIT
+        DB-->>API: orderId
+        API-->>UI: 201 Created — orderId, status PENDING, finalAmount
+    end
+
+    rect rgb(240, 240, 255)
+        Note over Customer,PAY: Giai đoạn 5 — Thanh toán Idempotent
+        UI->>API: POST /payments với orderId, method, idempotencyKey
+        API->>API: JwtAuthGuard — xác thực
+        API->>DB: SELECT FROM Payments WHERE idempotency_key = ?
+        alt Key đã tồn tại — duplicate request
+            DB-->>API: Payment record cũ
+            API-->>UI: 200 OK — kết quả lần đầu, không xử lý lại
+        else Lần đầu tiên
+            DB-->>API: null
+            API->>PAY: processPayment amount, method
+            alt Thanh toán THÀNH CÔNG
+                PAY-->>API: success true
+                API->>DB: INSERT INTO Payments status=SUCCESS
+                API->>DB: UPDATE Orders SET status = PAID
+                API->>DB: UPDATE Users SET loyalty_points = loyalty_points + earned
+                API-->>UI: 200 OK — status PAID, orderId
+                UI-->>Customer: Màn hình Xác nhận — Đặt hàng thành công — PAID
+            else Thanh toán THẤT BẠI
+                PAY-->>API: success false
+                API->>DB: INSERT INTO Payments status=FAILED
+                API->>DB: UPDATE Orders SET status = PAYMENT_FAILED
+                API-->>UI: 200 OK — status PAYMENT_FAILED
+                UI-->>Customer: Thanh toán thất bại — nút Thử lại
+            end
+        end
+    end
