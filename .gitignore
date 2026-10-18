@@ -1,0 +1,24 @@
+# ───────────── Root ─────────────
+.env
+.env.local
+
+# ───────────── Node ─────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ───────────── NestJS (apps/api) ─────────────
+apps/api/dist/
+apps/api/tsconfig.build.tsbuildinfo
+
+# ───────────── Next.js (apps/web) ─────────────
+apps/web/.next/
+apps/web/out/
+
+# ───────────── Docker ─────────────
+*.log
+
+# ───────────── OS ─────────────
+.DS_Store
+Thumbs.db

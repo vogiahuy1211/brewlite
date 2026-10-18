@@ -13,12 +13,17 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  backend:
+  api:
     build:
-      context: ./backend
+      context: ./apps/api
       dockerfile: Dockerfile
-    container_name: brewlite_backend
+    container_name: brewlite_api
     restart: always
     environment:
       PORT: 4000
@@ -28,20 +33,21 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
-  frontend:
+  web:
     build:
-      context: ./frontend
+      context: ./apps/web
       dockerfile: Dockerfile
-    container_name: brewlite_frontend
+    container_name: brewlite_web
     restart: always
     environment:
       NEXT_PUBLIC_API_URL: "http://localhost:4000"
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      - api
 
 volumes:
   postgres_data:
