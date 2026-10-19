@@ -1,27 +1,78 @@
-import { Product } from "@/types/product";
+import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-export async function getProducts(): Promise<Product[]> {
-  const res = await fetch(`${API_URL}/api/products`, {
-    cache: "no-store",
-  });
+export const apiClient = axios.create({
+  baseURL: `${API_BASE_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-  if (!res.ok) {
-    throw new Error(`Không thể tải danh sách sản phẩm (${res.status})`);
+apiClient.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('brewlite_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
+  return config;
+});
 
-  return res.json() as Promise<Product[]>;
+export async function getProducts() {
+  const res = await apiClient.get('/products');
+  return res.data;
 }
 
-export async function getProduct(id: string): Promise<Product> {
-  const res = await fetch(`${API_URL}/api/products/${id}`, {
-    cache: "no-store",
-  });
+export async function getProduct(id: string) {
+  const res = await apiClient.get(`/products/${id}`);
+  return res.data;
+}
 
-  if (!res.ok) {
-    throw new Error(`Không tìm thấy sản phẩm (${res.status})`);
-  }
+export async function getToppings() {
+  const res = await apiClient.get('/toppings');
+  return res.data;
+}
 
-  return res.json() as Promise<Product>;
+export async function validatePromotion(code: string) {
+  const res = await apiClient.get(`/promotions/validate?code=${encodeURIComponent(code)}`);
+  return res.data;
+}
+
+export async function register(data: { email: string; password: string }) {
+  const res = await apiClient.post('/auth/register', data);
+  return res.data;
+}
+
+export async function login(data: { email: string; password: string }) {
+  const res = await apiClient.post('/auth/login', data);
+  return res.data;
+}
+
+export async function createOrder(data: {
+  items: Array<{ productId: string; size: string; qty: number; toppingIds?: string[] }>;
+  promoCode?: string;
+}) {
+  const res = await apiClient.post('/orders', data);
+  return res.data;
+}
+
+export async function processPayment(data: {
+  orderId: string;
+  idempotencyKey: string;
+  method: 'WALLET' | 'CARD';
+  simulateFailure?: boolean;
+}) {
+  const res = await apiClient.post('/payments', data);
+  return res.data;
+}
+
+export async function getMyOrders() {
+  const res = await apiClient.get('/orders/me');
+  return res.data;
+}
+
+export async function getOrder(id: string) {
+  const res = await apiClient.get(`/orders/${id}`);
+  return res.data;
 }
