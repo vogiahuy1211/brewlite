@@ -1,21 +1,27 @@
-import axios from "axios";
+import { Product } from "@/types/product";
 
-const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-// Tự động gắn token JWT nếu có lưu trong localStorage
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+export async function getProducts(): Promise<Product[]> {
+  const res = await fetch(`${API_URL}/api/products`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Không thể tải danh sách sản phẩm (${res.status})`);
   }
-  return config;
-});
 
-export default api;
+  return res.json() as Promise<Product[]>;
+}
+
+export async function getProduct(id: string): Promise<Product> {
+  const res = await fetch(`${API_URL}/api/products/${id}`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Không tìm thấy sản phẩm (${res.status})`);
+  }
+
+  return res.json() as Promise<Product>;
+}
