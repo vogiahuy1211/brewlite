@@ -1,5 +1,6 @@
 import { getProducts } from "@/services/api";
 import ProductCard from "@/components/ProductCard";
+import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 
 export default async function MenuPage() {
@@ -40,12 +41,12 @@ export default async function MenuPage() {
               <p className="font-semibold text-gray-800">Không thể tải menu</p>
               <p className="text-sm text-gray-500 mt-1">{error}</p>
             </div>
-            <a
+            <Link
               href="/"
               className="px-5 py-2 bg-amber-500 text-white rounded-full text-sm font-medium hover:bg-amber-600 transition-colors"
             >
               Thử lại
-            </a>
+            </Link>
           </div>
         )}
 

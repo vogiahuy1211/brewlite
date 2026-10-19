@@ -56,8 +56,8 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run database migrations
-        run: npx prisma migrate deploy
+      - name: Push database schema
+        run: npx prisma db push --skip-generate
 
       - name: Run unit tests
         run: npm test -- --passWithNoTests --forceExit
