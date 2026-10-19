@@ -1,0 +1,66 @@
+flowchart TD
+    subgraph LOCAL["💻 Môi trường Local (docker compose up)"]
+        direction TB
+        DEV["Developer Machine"]
+
+        subgraph DOCKER_LOCAL["Docker Compose Network: brewlite_net"]
+            WEB_LOCAL["Container: brewlite_web\nNext.js :3000"]
+            API_LOCAL["Container: brewlite_api\nNestJS :4000"]
+            DB_LOCAL["Container: brewlite_postgres\nPostgreSQL :5432\nVolume: postgres_data"]
+        end
+
+        DEV -->|"http://localhost:3000"| WEB_LOCAL
+        DEV -->|"http://localhost:4000"| API_LOCAL
+        WEB_LOCAL -->|"REST API"| API_LOCAL
+        API_LOCAL -->|"Prisma ORM"| DB_LOCAL
+    end
+
+    subgraph CI["⚙️ CI Pipeline (GitHub Actions — Pull Request)"]
+        direction LR
+        PR["Pull Request\nopened / updated"]
+        CI_INSTALL["Step: npm install\n(api + web)"]
+        CI_LINT["Step: Lint\n(oxlint + eslint)"]
+        CI_TEST["Step: Unit Tests\n(jest)"]
+        CI_BUILD["Step: Build\n(nest build + next build)"]
+        CI_RESULT{{"Pass / Fail"}}
+
+        PR --> CI_INSTALL --> CI_LINT --> CI_TEST --> CI_BUILD --> CI_RESULT
+    end
+
+    subgraph CD["🚀 CD Pipeline (GitHub Actions — Push to main)"]
+        direction LR
+        PUSH["Push to main\nor tag release"]
+        CD_TEST["Step: Lint + Test"]
+        CD_BUILD_IMG["Step: Build Docker Images\n(api + web)"]
+        CD_PUSH_REG["Step: Push to\nGitHub Container Registry"]
+        CD_DEPLOY["Step: Deploy to Production\n(Railway CLI / Render Hook)"]
+        CD_MIGRATE["Step: Run Migration\nprisma migrate deploy"]
+        CD_SMOKE["Step: Smoke Test\nGET /health → 200 OK"]
+
+        PUSH --> CD_TEST --> CD_BUILD_IMG --> CD_PUSH_REG --> CD_DEPLOY --> CD_MIGRATE --> CD_SMOKE
+    end
+
+    subgraph PRODUCTION["☁️ Production (Railway / Render / Fly.io)"]
+        direction TB
+        CDN["CDN / Edge\nHTTPS :443"]
+
+        subgraph PROD_SERVICES["Production Services"]
+            WEB_PROD["Service: brewlite-web\nNext.js\nHTTPS public"]
+            API_PROD["Service: brewlite-api\nNestJS\nHTTPS public\nGET /health"]
+            DB_PROD["Service: PostgreSQL\nPrivate — internal only\nPersistent Volume"]
+        end
+
+        SECRETS["Secrets Manager\nJWT_SECRET\nDATABASE_URL\nNEXT_PUBLIC_API_URL"]
+
+        USER["👤 User\nBrowser / Mobile"]
+
+        USER -->|"HTTPS"| CDN
+        CDN --> WEB_PROD
+        WEB_PROD -->|"HTTPS REST"| API_PROD
+        API_PROD -->|"Prisma — internal"| DB_PROD
+        SECRETS -.->|"env vars"| API_PROD
+        SECRETS -.->|"env vars"| WEB_PROD
+    end
+
+    CI_RESULT -->|"PR approved\nmerge to main"| PUSH
+    CD_SMOKE -->|"✅ Deployed"| PRODUCTION
