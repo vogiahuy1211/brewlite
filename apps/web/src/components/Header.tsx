@@ -1,49 +1,48 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, User, Coffee } from 'lucide-react';
+import { ShoppingCart, Coffee } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { useHydrated } from '@/hooks/useHydrated';
+import AccountMenu from '@/components/AccountMenu';
 
 export default function Header() {
   const totalItems = useCartStore((state) => state.getTotalItems());
   const mounted = useHydrated();
 
   return (
-    <header className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-            <Coffee size={20} />
+    <header className="border-b border-orange-300/20 bg-[linear-gradient(110deg,#25150f,#482718_65%,#301b14)] text-orange-50 shadow-[0_4px_24px_#29160c14] sticky top-0 z-20">
+      <div className="flex min-h-20 max-w-5xl mx-auto flex-wrap items-center justify-between gap-3 px-4 py-3 sm:flex-nowrap sm:px-6">
+        <Link href="/" aria-label="BrewLite — về thực đơn" className="focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-300 flex shrink-0 items-center gap-2.5 rounded-xl group">
+          <div className="border border-orange-200/25 bg-[linear-gradient(145deg,#b65e28,#63321d)] shadow-[0_4px_16px_#160c0733,inset_0_1px_0_#ffe0bc33] flex h-10 w-10 items-center justify-center rounded-2xl text-orange-100">
+            <Coffee size={22} aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 leading-tight">BrewLite</h1>
-            <p className="text-[10px] text-gray-500 font-medium">Coffee & Tea Express</p>
+            <span className="font-serif text-2xl font-bold tracking-tight leading-tight text-orange-50">Brew<span className="text-orange-300">Lite</span></span>
+            <p className="text-[10px] tracking-widest text-orange-100/70">COFFEE & TEA</p>
           </div>
         </Link>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/orders"
-            aria-label="Lịch sử đơn"
-            className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <User size={20} />
-          </Link>
+        <nav aria-label="Điều hướng chính" className="flex w-full items-center justify-between gap-2 sm:w-auto sm:gap-3">
+          <div className="hidden sm:block">
+            <Link href="/" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[13px] font-medium text-orange-100 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-300 motion-reduce:transition-none">Thực đơn</Link>
+          </div>
+          <AccountMenu />
 
           <Link
             href="/cart"
             aria-label="Xem giỏ hàng"
-            className="relative p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[13px] font-medium text-orange-100 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-300 motion-reduce:transition-none border border-orange-200/20 bg-white/5 relative"
           >
-            <ShoppingCart size={20} />
+            <ShoppingCart size={20} aria-hidden="true" />
+            <span className="hidden sm:inline">Giỏ hàng</span>
             {mounted && totalItems > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[11px] font-bold flex items-center justify-center shadow-sm">
+              <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-orange-300 text-amber-950 rounded-full text-[11px] font-bold flex items-center justify-center shadow-sm">
                 {totalItems > 99 ? '99+' : totalItems}
               </span>
             )}
           </Link>
-        </div>
+        </nav>
       </div>
     </header>
   );

@@ -45,7 +45,7 @@ function environment() {
     }).outputText;
     vm.runInNewContext(code, {
       exports: loaded.exports, module: loaded, process, console, crypto: { randomUUID },
-      window: { addEventListener: (name, fn) => { events[name] = fn; } },
+      window: { addEventListener: (name, fn) => { events[name] = fn; }, location: { get search() { return env.search || ''; } } },
       localStorage: env.storage, sessionStorage: env.storage, setTimeout, clearTimeout,
       URLSearchParams, URL, Intl, AbortController,
       require: name => {
@@ -152,7 +152,7 @@ function component(e, filename, props = {}) {
   e.overrides = {
     ...(e.overrides || {}), react,
     'react/jsx-runtime': {jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})},
-    'next/navigation': {useRouter:()=>e.router,usePathname:()=>e.pathname || '/checkout'},
+    'next/navigation': {useRouter:()=>e.router,usePathname:()=>e.pathname || '/checkout',useSearchParams:()=>new URLSearchParams(e.search || '')},
     'next/link': {default:'a',__esModule:true},
     '@/hooks/useHydrated': {useHydrated:()=>true},
     '@/services/session': {...e.session, useSession:Object.assign(selector=>selector?selector(e.session.useSession.getState()):e.session.useSession.getState(),e.session.useSession)},
@@ -388,3 +388,68 @@ test('B-02: 401 khi xóa token thất bại vẫn cảnh báo, không báo anony
   assert.equal(e.session.useSession.getState().status,'unavailable');
   assert.ok(e.session.useSession.getState().logoutError.includes('Đăng xuất chưa hoàn tất'));
 });
+
+function uiNodes(node) {
+  return !node || typeof node !== 'object' ? [] : [node, ...[].concat(node.props?.children || []).flatMap(uiNodes)];
+}
+function authForm(mode = 'register') {
+  const e = environment();
+  e.search = `?mode=${mode}&next=%2Fcheckout`;
+  const routes = [];
+  e.router = { replace: path => { routes.push(path); e.search = path.includes('?') ? path.slice(path.indexOf('?')) : ''; } };
+  e.respond = async config => ({ data: config.url === '/auth/me' ? user : { access_token: 'test-session' }, config });
+  const view = component(e, 'app/login/page.tsx');
+  const find = predicate => uiNodes(view.render()).find(predicate);
+  const input = (id, value) => find(n => n.props?.id === id).props.onChange({ target: { value } });
+  const submit = () => find(n => n.type === 'form').props.onSubmit({ preventDefault() {} });
+  return { e, view, find, input, submit, routes };
+}
+
+for (const confirmation of ['', 'different-password']) test(`Register chặn xác nhận ${confirmation ? 'không khớp' : 'rỗng'}`, async () => {
+  const h = authForm();
+  h.input('auth-email', 'a@example.invalid'); h.input('auth-password', 'password-123');
+  h.input('auth-confirm-password', confirmation);
+  await h.submit();
+  assert.equal(h.e.calls.length, 0);
+  assert.match(h.view.text(), confirmation ? /chưa khớp/ : /Vui lòng nhập xác nhận/);
+  assert.equal(h.e.values.size, 0);
+});
+test('Register hợp lệ chỉ gửi email/password, không lưu mật khẩu', async () => {
+  const h = authForm();
+  h.input('auth-email', 'a@example.invalid'); h.input('auth-password', 'password-123'); h.input('auth-confirm-password', 'password-123');
+  assert.equal(uiNodes(h.view.render()).filter(n => n.type === 'input').length, 3);
+  assert.equal(h.find(n => n.props?.id === 'auth-confirm-password').props.type, 'password');
+  await h.submit();
+  assert.deepEqual(JSON.parse(h.e.calls.find(c => c.url === '/auth/register').data), {email:'a@example.invalid',password:'password-123'});
+  assert.deepEqual(h.routes, ['/checkout']);
+  assert.ok(!JSON.stringify([...h.e.values]).includes('password-123'));
+});
+test('Login vẫn có hai trường và không yêu cầu xác nhận mật khẩu', async () => {
+  const h = authForm('login');
+  assert.equal(uiNodes(h.view.render()).filter(n => n.type === 'input').length, 2);
+  h.input('auth-email','a@example.invalid'); h.input('auth-password','password-123');
+  await h.submit();
+  assert.equal(h.e.calls[0].url, '/auth/login'); assert.deepEqual(h.routes,['/checkout']);
+});
+test('Chuyển chế độ xóa mật khẩu/xác nhận, giữ next', () => {
+  const h = authForm();
+  h.input('auth-password','password-123'); h.input('auth-confirm-password','password-123');
+  h.find(n=>n.type==='button' && n.props.type==='button').props.onClick();
+  assert.equal(new URLSearchParams(h.e.search).get('next'),'/checkout');
+  assert.equal(h.find(n=>n.props?.id==='auth-password').props.value,'');
+  assert.equal(h.find(n=>n.props?.id==='auth-confirm-password'),undefined);
+  h.find(n=>n.type==='button' && n.props.type==='button').props.onClick();
+  assert.equal(h.find(n=>n.props?.id==='auth-confirm-password').props.value,'');
+});
+for (const pathname of ['/', '/cart', '/checkout', '/orders', '/orders/'+orderId, '/products/'+user.id, '/login']) {
+  test('Footer đúng phạm vi route '+pathname, () => {
+    const e=environment(); e.pathname=pathname;
+    const view=component(e,'components/Footer.tsx');
+    if(pathname==='/login') assert.equal(view.render(),null);
+    else {
+      assert.equal(uiNodes(view.render()).filter(n=>n.type==='footer').length,1);
+      assert.deepEqual(uiNodes(view.render()).filter(n=>n.type==='a').map(n=>n.props.href),['/','/','/cart','/orders','/login']);
+      assert.match(view.text(),/không phát sinh giao dịch tiền thật/);
+    }
+  });
+}

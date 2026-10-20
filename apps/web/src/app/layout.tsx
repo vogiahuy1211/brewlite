@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SessionBoundary from "@/components/SessionBoundary";
 import { Suspense } from "react";
+import Footer from "@/components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,9 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" style={{ fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
         <Suspense fallback={<p role="status" className="p-8 text-center">Đang tải BrewLite…</p>}>
-          <SessionBoundary>{children}</SessionBoundary>
+          <SessionBoundary>{children}<Footer /></SessionBoundary>
         </Suspense>
       </body>
     </html>
