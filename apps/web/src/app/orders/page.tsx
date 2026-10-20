@@ -5,26 +5,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, ShoppingBag, LogOut } from 'lucide-react';
 import { getMyOrders } from '@/services/api';
+import { logout, useSession } from '@/services/session';
 
 export default function OrderHistoryPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const user = useSession((state) => state.user);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('brewlite_token');
-    const savedUser = localStorage.getItem('brewlite_user');
-
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-
     getMyOrders()
       .then((data) => {
         setOrders(data);
@@ -36,9 +25,8 @@ export default function OrderHistoryPage() {
   }, [router]);
 
   const handleLogout = () => {
-    localStorage.removeItem('brewlite_token');
-    localStorage.removeItem('brewlite_user');
-    router.push('/login');
+    const result = logout();
+    if (result.success) router.push('/login');
   };
 
   const getStatusBadge = (status: string) => {

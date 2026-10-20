@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Coffee, Lock, Mail } from 'lucide-react';
-import { login, register } from '@/services/api';
+import { apiErrorMessage, login, register } from '@/services/api';
+import { acceptLogin, captureSession, safeReturnPath } from '@/services/session';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -13,28 +14,34 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(() => {
+    const generation = ++lifetime.current;
+    return () => { lifetime.current = generation + 1; };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
+    const generation = lifetime.current;
+    const origin = captureSession();
     setError(null);
     setLoading(true);
 
     try {
-      if (isLogin) {
-        const res = await login({ email, password });
-        localStorage.setItem('brewlite_token', res.access_token);
-        localStorage.setItem('brewlite_user', JSON.stringify(res.user));
-      } else {
-        const res = await register({ email, password });
-        localStorage.setItem('brewlite_token', res.access_token);
-        localStorage.setItem('brewlite_user', JSON.stringify(res.user));
+      const res = await (isLogin ? login : register)({ email, password });
+      if (lifetime.current !== generation) return;
+      await acceptLogin(res, origin);
+      if (lifetime.current === generation) {
+        router.replace(safeReturnPath(new URLSearchParams(window.location.search).get('next')));
       }
-      router.back();
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Thao tác không thành công';
-      setError(Array.isArray(msg) ? msg[0] : msg);
+    } catch (err) {
+      if (lifetime.current === generation) setError(apiErrorMessage(err, 'Thao tác không thành công'));
     } finally {
-      setLoading(false);
+      inFlight.current = false;
+      if (lifetime.current === generation) setLoading(false);
     }
   };
 
@@ -56,7 +63,7 @@ export default function AuthPage() {
           {isLogin ? 'Đăng nhập BrewLite' : 'Tạo tài khoản mới'}
         </h2>
         <p className="mt-1 text-center text-xs text-gray-500">
-          {isLogin ? 'Đăng nhập để đặt nước và tích điểm thành viên' : 'Đăng ký nhận ngay mã giảm giá cho đơn đầu tiên'}
+          {isLogin ? 'Đăng nhập để đặt nước và tích điểm thành viên' : 'Tạo tài khoản để đặt đồ uống'}
         </p>
       </div>
 

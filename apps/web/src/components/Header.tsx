@@ -3,15 +3,11 @@
 import Link from 'next/link';
 import { ShoppingCart, User, Coffee } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
-import { useEffect, useState } from 'react';
+import { useHydrated } from '@/hooks/useHydrated';
 
 export default function Header() {
   const totalItems = useCartStore((state) => state.getTotalItems());
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-sm">
