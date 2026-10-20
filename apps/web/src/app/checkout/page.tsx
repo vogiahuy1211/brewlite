@@ -1,11 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Wallet, CreditCard, Tag, ShieldCheck } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { createOrder, processPayment, validatePromotion } from '@/services/api';
+import type { CartItem } from '@/types/product';
+
+function cartSignature(items: CartItem[]): string {
+  return JSON.stringify(items.map((item) => JSON.stringify({
+    productId: item.productId,
+    qty: item.qty,
+    size: item.size,
+    price: item.price,
+    toppingIds: item.toppings.map((topping) => topping.id).sort(),
+  })).sort());
+}
+
+function paymentOutcome(
+  response: unknown,
+  orderId: string,
+  method: 'WALLET' | 'CARD',
+): 'PAID' | 'FAILED' | 'UNCONFIRMED' {
+  if (!response || typeof response !== 'object') return 'UNCONFIRMED';
+  const payment = response as Record<string, unknown>;
+  if (typeof payment.id !== 'string' || !payment.id.trim()
+    || typeof orderId !== 'string' || !orderId
+    || payment.orderId !== orderId || payment.method !== method
+    || typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount < 0
+    || typeof payment.isDuplicate !== 'boolean' || typeof payment.message !== 'string') {
+    return 'UNCONFIRMED';
+  }
+  if (payment.status === 'SUCCESS' && payment.orderStatus === 'PAID') return 'PAID';
+  if (payment.status === 'FAILED' && payment.orderStatus === 'PAYMENT_FAILED') return 'FAILED';
+  return 'UNCONFIRMED';
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -13,7 +43,6 @@ export default function CheckoutPage() {
 
   const items = useCartStore((state) => state.items);
   const totalPrice = useCartStore((state) => state.getTotalPrice());
-  const clearCart = useCartStore((state) => state.clearCart);
 
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET');
   const [promoCode, setPromoCode] = useState('');
@@ -23,6 +52,15 @@ export default function CheckoutPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionLocked, setSubmissionLocked] = useState(false);
+  // Keep this attempt locked until navigation; recovery is a separate flow.
+  const submissionStarted = useRef(false);
+  const lifecycle = useRef(0);
+
+  useEffect(() => {
+    const generation = ++lifecycle.current;
+    return () => { lifecycle.current = generation + 1; };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -64,23 +102,47 @@ export default function CheckoutPage() {
   };
 
   const handleCheckout = async () => {
-    setError(null);
-    setLoading(true);
-
+    if (submissionStarted.current) return;
+    const generation = lifecycle.current;
+    const isCurrent = () => lifecycle.current === generation;
+    let requestStarted = false;
     try {
-      // 1. Sinh Idempotency-Key (UUID v4)
-      const idempotencyKey = crypto.randomUUID();
-
-      // 2. Tạo đơn hàng PENDING
-      const orderRes = await createOrder({
-        items: items.map((i) => ({
+      // Read the live store: the rendered items may already be stale.
+      const currentItems = useCartStore.getState().items;
+      if (!Array.isArray(currentItems) || currentItems.length === 0
+        || currentItems.some((item) => !item
+          || typeof item.productId !== 'string' || !item.productId.trim()
+          || !['S', 'M', 'L'].includes(item.size)
+          || !Number.isInteger(item.qty) || item.qty <= 0
+          || !Number.isFinite(item.price) || item.price < 0
+          || !Array.isArray(item.toppings)
+          || item.toppings.some((topping) => !topping || typeof topping.id !== 'string' || !topping.id.trim()))
+        || !Number.isFinite(currentItems.reduce((sum, item) => sum + item.price * item.qty, 0))) {
+        setError('Giỏ hàng trống hoặc không hợp lệ. Vui lòng kiểm tra lại trước khi thanh toán.');
+        return;
+      }
+      const submittedCart = cartSignature(currentItems);
+      const orderPayload = {
+        items: currentItems.map((i) => ({
           productId: i.productId,
           size: i.size,
           qty: i.qty,
           toppingIds: i.toppings.map((t) => t.id),
         })),
         promoCode: discountAmount > 0 ? promoCode : undefined,
-      });
+      };
+      // 1. Sinh Idempotency-Key (UUID v4)
+      const idempotencyKey = crypto.randomUUID();
+
+      // Lock only after local preparation succeeds, immediately before dispatch.
+      submissionStarted.current = true;
+      setSubmissionLocked(true);
+      setError(null);
+      setLoading(true);
+      requestStarted = true;
+      // 2. Tạo đơn hàng PENDING
+      const orderRes = await createOrder(orderPayload);
+      if (!isCurrent()) return;
 
       // 3. Tiến hành thanh toán qua Mock Payment
       const paymentRes = await processPayment({
@@ -88,14 +150,33 @@ export default function CheckoutPage() {
         idempotencyKey,
         method: paymentMethod,
       });
+      if (!isCurrent()) return;
 
-      // 4. Xóa giỏ hàng và chuyển sang màn hình xác nhận
-      clearCart();
+      const outcome = paymentOutcome(paymentRes, orderRes.id, paymentMethod);
+      if (outcome !== 'PAID') {
+        setError(outcome === 'FAILED'
+          ? 'PAYMENT_FAILED: Backend đã xác nhận thanh toán thất bại. Giỏ hàng được giữ nguyên. Vui lòng kiểm tra đơn trong Lịch sử đơn trước khi bắt đầu lại.'
+          : 'UNCONFIRMED: Chưa xác nhận được kết quả giao dịch. Giỏ hàng được giữ nguyên. Vui lòng đối chiếu trạng thái đơn; không tạo thanh toán mới.');
+        return;
+      }
+
+      // Chỉ xóa giỏ và điều hướng sau phản hồi thanh toán hợp lệ.
+      const cart = useCartStore.getState();
+      // Malformed or changed live data must never erase the current cart.
+      let unchanged = false;
+      try { unchanged = cartSignature(cart.items) === submittedCart; } catch { /* Preserve cart. */ }
+      if (unchanged) cart.clearCart();
       router.push(`/orders/${orderRes.id}`);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Thanh toán thất bại, vui lòng thử lại';
-      setError(Array.isArray(msg) ? msg[0] : msg);
-      setLoading(false);
+    } catch {
+      if (!isCurrent()) return;
+      if (!requestStarted) {
+        setError('Không thể chuẩn bị yêu cầu thanh toán. Chưa gửi yêu cầu; vui lòng kiểm tra và thử lại.');
+        return;
+      }
+      // A transport error does not prove whether the server committed the operation.
+      setError('UNCONFIRMED: Không xác nhận được kết quả tạo đơn hoặc thanh toán. Giỏ hàng được giữ nguyên. Vui lòng đối chiếu trạng thái đơn; không tạo thanh toán mới.');
+    } finally {
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -235,10 +316,10 @@ export default function CheckoutPage() {
         <div className="max-w-lg mx-auto">
           <button
             onClick={handleCheckout}
-            disabled={loading}
+            disabled={loading || submissionLocked}
             className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-50 text-white font-bold rounded-2xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
           >
-            {loading ? 'Đang thực hiện thanh toán...' : `Xác nhận trả ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalAmount)}`}
+            {loading ? 'Đang thực hiện thanh toán...' : submissionLocked ? 'Đã gửi yêu cầu — cần đối chiếu trạng thái đơn' : `Xác nhận trả ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalAmount)}`}
           </button>
         </div>
       </div>
