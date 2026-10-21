@@ -3,25 +3,33 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Coffee, Clock, Home, ArrowRight } from 'lucide-react';
-import { getOrder } from '@/services/api';
+import axios from 'axios';
+import { apiErrorMessage, getOrder } from '@/services/api';
+import { captureSession, isSessionCurrent } from '@/services/session';
+import { orderLabels, readOrder, type ConfirmedOrder } from '@/services/orderConfirmation';
 
 export default function OrderConfirmPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [order, setOrder] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [result, setResult] = useState<{ id: string; order?: ConfirmedOrder; error?: string } | null>(null);
 
   useEffect(() => {
+    let active = true;
+    const session = captureSession();
     getOrder(id)
       .then((data) => {
-        setOrder(data);
-        setLoading(false);
+        if (active && isSessionCurrent(session)) setResult({ id, order: readOrder(data, id) });
       })
-      .catch(() => {
-        setLoading(false);
+      .catch((error: unknown) => {
+        if (!active || !isSessionCurrent(session)) return;
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        setResult({ id, error: status === 403 ? 'Bạn không có quyền xem đơn hàng này.'
+          : status === 404 ? 'Không tìm thấy đơn hàng hoặc bạn không có quyền truy cập.'
+          : apiErrorMessage(error, 'Không tải được đơn hàng. Chưa thể xác nhận trạng thái thanh toán.') });
       });
+    return () => { active = false; };
   }, [id]);
 
-  if (loading) {
+  if (!result || result.id !== id) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -29,33 +37,38 @@ export default function OrderConfirmPage({ params }: { params: Promise<{ id: str
     );
   }
 
+  const order = result.order;
+  if (!order) return (
+    <div role="alert" className="min-h-screen bg-gray-50 p-8 text-center space-y-4">
+      <h2 className="font-bold">Chưa xác minh được đơn hàng</h2>
+      <p>{result.error}</p>
+      <Link href="/orders" className="underline">Về lịch sử đơn hàng</Link>
+    </div>
+  );
+  const paid = ['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(order.status);
+
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-md mx-auto space-y-4">
         {/* Card Thành công */}
         <div className="bg-white rounded-3xl p-6 text-center border border-gray-100 shadow-sm space-y-3">
-          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-            <CheckCircle2 size={36} />
+          <div className={`w-16 h-16 ${paid ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-700'} rounded-full flex items-center justify-center mx-auto shadow-inner`}>
+            {paid ? <CheckCircle2 size={36} /> : <Clock size={36} />}
           </div>
 
-          <h2 className="text-xl font-black text-gray-900">Đặt hàng thành công!</h2>
+          <h2 className="text-xl font-black text-gray-900">{orderLabels[order.status]}</h2>
           <p className="text-xs text-gray-500 max-w-xs mx-auto">
-            Đơn hàng của bạn đã được tiếp nhận và nhân viên quầy đang chuẩn bị món.
+            Trạng thái được cung cấp bởi hệ thống. Thanh toán mô phỏng, không thu tiền thật.
           </p>
 
           <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-100 inline-block w-full">
             <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Mã đơn hàng</p>
             <p className="text-lg font-mono font-black text-amber-900 mt-0.5">#{id.slice(0, 8).toUpperCase()}</p>
-            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500 text-white text-[11px] font-bold shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-              Trạng thái: {order?.status || 'PAID'}
+            <div className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${paid ? 'bg-green-600' : 'bg-amber-700'} text-white text-[11px] font-bold shadow-sm`}>
+              Trạng thái: {order.status}
             </div>
           </div>
 
-          <div className="pt-2 text-xs text-gray-600 flex items-center justify-center gap-1.5 font-medium">
-            <Clock size={15} className="text-amber-500" />
-            Mời bạn tới quầy lấy nước sau 3 - 5 phút
-          </div>
         </div>
 
         {/* Danh sách món trong đơn */}
@@ -66,7 +79,7 @@ export default function OrderConfirmPage({ params }: { params: Promise<{ id: str
               Chi tiết món đã đặt
             </h3>
             <div className="divide-y divide-gray-100">
-              {order.items.map((item: any) => (
+              {order.items.map((item) => (
                 <div key={item.id} className="py-2.5 flex justify-between items-start text-xs">
                   <div>
                     <p className="font-bold text-gray-900">
@@ -85,7 +98,7 @@ export default function OrderConfirmPage({ params }: { params: Promise<{ id: str
             </div>
 
             <div className="border-t border-gray-100 pt-3 flex justify-between items-center text-sm font-bold">
-              <span>Đã thanh toán</span>
+              <span>{paid ? 'Số tiền đã thanh toán mô phỏng' : 'Tổng tiền đơn hàng'}</span>
               <span className="text-amber-600 font-black">
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(order.finalAmount)}
               </span>
