@@ -25,13 +25,13 @@ async function main() {
   ]);
   console.log(`  ✅ ${toppings.length} toppings đã được tạo`);
 
-  // ── Seed Products ──
+  // ── Seed Products (15 sản phẩm) ──
   const products = await Promise.all([
     prisma.products.create({
       data: {
         name: 'Cà phê sữa',
         price: 35000,
-        image_url: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=400',
+        image_url: '/img/ca-phe-sua.jpg',
         stock: 50,
       },
     }),
@@ -39,7 +39,7 @@ async function main() {
       data: {
         name: 'Americano',
         price: 40000,
-        image_url: 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=400',
+        image_url: '/img/americano.jpg',
         stock: 50,
       },
     }),
@@ -47,7 +47,7 @@ async function main() {
       data: {
         name: 'Cappuccino',
         price: 45000,
-        image_url: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=400',
+        image_url: '/img/cappuccino.jpg',
         stock: 30,
       },
     }),
@@ -55,7 +55,7 @@ async function main() {
       data: {
         name: 'Matcha Latte',
         price: 50000,
-        image_url: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=400',
+        image_url: '/img/matcha-latte.jpg',
         stock: 25,
       },
     }),
@@ -63,7 +63,7 @@ async function main() {
       data: {
         name: 'Trà sữa trân châu',
         price: 45000,
-        image_url: 'https://images.unsplash.com/photo-1558857563-b371033873b8?w=400',
+        image_url: '/img/tra-sua-tran-chau.jpg',
         stock: 40,
       },
     }),
@@ -71,7 +71,7 @@ async function main() {
       data: {
         name: 'Caramel Macchiato',
         price: 55000,
-        image_url: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=400',
+        image_url: '/img/caramel-macchiato.jpg',
         stock: 20,
       },
     }),
@@ -79,7 +79,7 @@ async function main() {
       data: {
         name: 'Cold Brew',
         price: 50000,
-        image_url: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400',
+        image_url: '/img/cold-brew.jpg',
         stock: 15,
       },
     }),
@@ -87,8 +87,64 @@ async function main() {
       data: {
         name: 'Bạc xỉu',
         price: 30000,
-        image_url: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
+        image_url: '/img/bac-xiu.jpg',
         stock: 50,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Cà phê đen đá',
+        price: 30000,
+        image_url: '/img/ca-phe-den-da.jpg',
+        stock: 50,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Cà phê muối',
+        price: 40000,
+        image_url: '/img/ca-phe-muoi.jpg',
+        stock: 45,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Cà phê trứng',
+        price: 45000,
+        image_url: '/img/ca-phe-trung.jpg',
+        stock: 30,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Trà đào cam sả',
+        price: 45000,
+        image_url: '/img/tra-dao-cam-sa.jpg',
+        stock: 40,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Trà vải hoa hồng',
+        price: 48000,
+        image_url: '/img/tra-vai-hoa-hong.jpg',
+        stock: 35,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Chocolate Đá Xay',
+        price: 55000,
+        image_url: '/img/chocolate-da-xay.jpg',
+        stock: 25,
+      },
+    }),
+    prisma.products.create({
+      data: {
+        name: 'Matcha Đá Xay',
+        price: 55000,
+        image_url: '/img/matcha-da-xay.jpg',
+        stock: 25,
       },
     }),
   ]);
