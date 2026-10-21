@@ -3,14 +3,26 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, ShoppingBag, LogOut } from 'lucide-react';
-import { getMyOrders } from '@/services/api';
+import { ArrowLeft, Clock, ShoppingBag, LogOut, XCircle } from 'lucide-react';
+import { getMyOrders, updateOrderStatus } from '@/services/api';
 
 export default function OrderHistoryPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const fetchOrders = () => {
+    getMyOrders()
+      .then((data) => {
+        setOrders(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('brewlite_token');
@@ -25,20 +37,28 @@ export default function OrderHistoryPage() {
       setUser(JSON.parse(savedUser));
     }
 
-    getMyOrders()
-      .then((data) => {
-        setOrders(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
-      });
+    fetchOrders();
   }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('brewlite_token');
     localStorage.removeItem('brewlite_user');
     router.push('/login');
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) return;
+
+    setCancellingId(orderId);
+    try {
+      await updateOrderStatus(orderId, 'CANCELLED');
+      alert('Đã hủy đơn hàng thành công!');
+      fetchOrders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Không thể hủy đơn hàng này!');
+    } finally {
+      setCancellingId(null);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -53,8 +73,10 @@ export default function OrderHistoryPage() {
         return <span className="bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold">Hoàn tất</span>;
       case 'PAYMENT_FAILED':
         return <span className="bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold">Thất bại</span>;
+      case 'CANCELLED':
+        return <span className="bg-gray-200 text-gray-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold line-through">Đã hủy (CANCELLED)</span>;
       default:
-        return <span className="bg-yellow-100 text-yellow-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold">Chờ xử lý</span>;
+        return <span className="bg-yellow-100 text-yellow-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold">Chờ xử lý (PENDING)</span>;
     }
   };
 
@@ -111,40 +133,59 @@ export default function OrderHistoryPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {orders.map((ord) => (
-                <div key={ord.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-mono font-bold text-gray-800">#{ord.id.slice(0, 8).toUpperCase()}</p>
-                      <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
-                        <Clock size={11} />
-                        {new Date(ord.createdAt).toLocaleString('vi-VN')}
-                      </p>
-                    </div>
-                    {getStatusBadge(ord.status)}
-                  </div>
+              {orders.map((ord) => {
+                const canCancel = ord.status === 'PENDING' || ord.status === 'PAID';
 
-                  <div className="border-t border-gray-50 pt-2 space-y-1">
-                    {ord.items.map((item: any) => (
-                      <div key={item.id} className="flex justify-between text-xs text-gray-600">
-                        <span>
-                          {item.productName} (Size {item.size}) × {item.qty}
-                        </span>
-                        <span className="font-semibold text-gray-800">
-                          {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.lineTotal)}
-                        </span>
+                return (
+                  <div key={ord.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-mono font-bold text-gray-800">#{ord.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                          <Clock size={11} />
+                          {new Date(ord.createdAt).toLocaleString('vi-VN')}
+                        </p>
                       </div>
-                    ))}
-                  </div>
+                      {getStatusBadge(ord.status)}
+                    </div>
 
-                  <div className="border-t border-gray-100 pt-2 flex justify-between items-center text-xs font-bold">
-                    <span className="text-gray-500">Tổng thanh toán:</span>
-                    <span className="text-amber-600 font-black text-sm">
-                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(ord.finalAmount)}
-                    </span>
+                    <div className="border-t border-gray-50 pt-2 space-y-1">
+                      {ord.items.map((item: any) => (
+                        <div key={item.id} className="flex justify-between text-xs text-gray-600">
+                          <span>
+                            {item.productName} (Size {item.size}) × {item.qty}
+                          </span>
+                          <span className="font-semibold text-gray-800">
+                            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.lineTotal)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-2 flex justify-between items-center text-xs font-bold">
+                      <span className="text-gray-500">Tổng thanh toán:</span>
+                      <span className="text-amber-600 font-black text-sm">
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(ord.finalAmount)}
+                      </span>
+                    </div>
+
+                    {/* Nút hủy đơn nếu trạng thái hợp lệ */}
+                    {canCancel && (
+                      <div className="border-t border-gray-50 pt-2 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={cancellingId === ord.id}
+                          onClick={() => handleCancelOrder(ord.id)}
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-600 rounded-xl text-xs font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                        >
+                          <XCircle size={14} />
+                          {cancellingId === ord.id ? 'Đang hủy...' : 'Hủy đơn này'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

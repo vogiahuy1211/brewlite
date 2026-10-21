@@ -76,3 +76,8 @@ export async function getOrder(id: string) {
   const res = await apiClient.get(`/orders/${id}`);
   return res.data;
 }
+
+export async function updateOrderStatus(id: string, status: string) {
+  const res = await apiClient.patch(`/orders/${id}/status`, { status });
+  return res.data;
+}

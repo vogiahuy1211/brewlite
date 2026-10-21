@@ -59,8 +59,14 @@ jobs:
       - name: Push database schema
         run: npx prisma db push --skip-generate
 
+      - name: Seed database
+        run: npx ts-node prisma/seed.ts
+
       - name: Run unit tests
         run: npm test -- --passWithNoTests --forceExit
+
+      - name: Run integration & e2e tests
+        run: npm run test:e2e -- --runInBand --forceExit
 
       - name: Build
         run: npm run build
